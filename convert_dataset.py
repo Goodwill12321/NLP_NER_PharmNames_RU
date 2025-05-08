@@ -1,11 +1,9 @@
-
 from openpyxl import load_workbook
 from tqdm import tqdm
 import json
 
-# === Настройки ===
 input_file = "nlp_dataset.xlsx"
-output_file = "for_labelstudio_streamed.jsonl"
+output_file = "for_labelstudio_streamed_fixed.jsonl"
 excluded_columns = []
 
 def make_hint(row_dict):
@@ -17,30 +15,23 @@ def make_hint(row_dict):
 def main():
     print("📥 Открытие Excel-файла...")
     wb = load_workbook(filename=input_file, read_only=True)
-    ws = wb.active  # используем первый лист
+    ws = wb.active
 
-    # Получаем заголовки
     headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
-
-    # Подсчёт количества строк для tqdm
-    total_rows = ws.max_row - 1  # без заголовка
+    total_rows = ws.max_row - 1
 
     print(f"✅ Всего строк: {total_rows}")
 
     with open(output_file, "w", encoding="utf-8") as f:
         for row in tqdm(ws.iter_rows(min_row=2), total=total_rows, desc="Обработка строк"):
             row_dict = {headers[i]: (str(cell.value).strip() if cell.value is not None else "") for i, cell in enumerate(row)}
-            item = {
-                "text": row_dict.get("ТоварПоставки", ""),
-                "hints": make_hint(row_dict)
-            }
-            # Добавляем все остальные колонки
-            for key, val in row_dict.items():
-                if key not in item:
-                    item[key] = val
-            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            # Сохраняем всё в "data"
+            data_item = {key: val for key, val in row_dict.items()}
+            data_item["hints"] = make_hint(row_dict)
+            json_line = {"data": data_item}
+            f.write(json.dumps(json_line, ensure_ascii=False) + "\n")
 
-    print(f"\n✅ Готово: {output_file}")
+    print(f"\n✅ Готово для импорта в Label Studio: {output_file}")
 
 if __name__ == "__main__":
     main()
