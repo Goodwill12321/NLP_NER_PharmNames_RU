@@ -2,8 +2,7 @@ from openpyxl import load_workbook
 import json
 from tqdm import tqdm
 
-def convert_excel_to_labelstudio(input_file, output_file):
-    # Колонки, которые нужно исключить из меток
+def convert_to_labelstudio(input_file, output_file):
     EXCLUDED_COLUMNS = {
         "ТоварПоставки", "ПредставлениеТовара", "МНН", "МННСтрокой",
         "ЖН", "СМНН", "КЛП", "Наркотический", "ОКПД2",
@@ -15,49 +14,31 @@ def convert_excel_to_labelstudio(input_file, output_file):
         "ВладелецРУИзРеестраЖН", "НомерРешенияРеестраЖН", "НомерРУ", "ДатаРУ"
     }
 
-    print("⏳ Загрузка Excel файла в режиме read_only...")
-    try:
-        wb = load_workbook(filename=input_file, read_only=True)
-        ws = wb.active
-        
-        # Получаем заголовки
-        headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
-        total_rows = ws.max_row - 1
-        
-        print(f"✅ Всего строк: {total_rows}")
-        print(f"❗ Колонки, исключённые из разметки: {EXCLUDED_COLUMNS}")
-
-        with open(output_file, "w", encoding="utf-8") as f_out:
-            for row in tqdm(ws.iter_rows(min_row=2), total=total_rows, desc="Обработка строк"):
-                row_data = {header: cell.value for header, cell in zip(headers, row)}
-                
-                task_data = {
-                    "data": {
-                        "text": str(row_data.get("ТоварПоставки", "")),
-                        "reference": str(row_data.get("ПредставлениеТовара", "")),
-                        "correlated_data": {
-                            col: str(row_data.get(col, "")) 
-                            for col in EXCLUDED_COLUMNS 
-                            if col in row_data
-                        },
-                        "labeling_data": {
-                            col: str(row_data.get(col, "")) 
-                            for col in headers 
-                            if col not in EXCLUDED_COLUMNS
-                        }
+    print("🔍 Чтение Excel файла...")
+    wb = load_workbook(filename=input_file, read_only=True)
+    ws = wb.active
+    
+    headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+    total_rows = ws.max_row - 1
+    
+    with open(output_file, "w", encoding="utf-8") as f_out:
+        for row in tqdm(ws.iter_rows(min_row=2), total=total_rows, desc="Конвертация"):
+            row_data = {header: str(cell.value) if cell.value is not None else "" 
+                      for header, cell in zip(headers, row)}
+            
+            # Базовая структура, которую ожидает Label Studio
+            task = {
+                "data": {
+                    "text": row_data.get("ТоварПоставки", ""),
+                    "meta": {
+                        "reference": row_data.get("ПредставлениеТовара", ""),
+                        **{k: v for k, v in row_data.items() if k not in EXCLUDED_COLUMNS}
                     }
                 }
-                f_out.write(json.dumps(task_data, ensure_ascii=False) + "\n")
-        
-        print(f"🎉 Конвертация завершена. Результат сохранён в {output_file}")
-        
-    except Exception as e:
-        print(f"❌ Ошибка при обработке файла: {e}")
-    finally:
-        wb.close()
+            }
+            f_out.write(json.dumps(task, ensure_ascii=False) + "\n")
+    
+    wb.close()
+    print(f"✅ Результат сохранён в {output_file}")
 
-if __name__ == "__main__":
-    convert_excel_to_labelstudio(
-        input_file="nlp_dataset.xlsx",
-        output_file="labelstudio_data.jsonl"
-    )
+convert_to_labelstudio("input.xlsx", "output.jsonl")
