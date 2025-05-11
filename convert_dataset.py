@@ -4,8 +4,8 @@ from tqdm import tqdm
 
 def convert_excel_to_labelstudio(input_file, output_file, max_records=None):
     EXCLUDED_COLUMNS = {
-        "№", "ТоварПоставки", "ПредставлениеТовара", "МНН", "МННСтрокой",
-        "ЖН", "СМНН", "КЛП", "Наркотический", "ОКПД2",
+        "№", "ТоварПоставки", "ПредставлениеТовара", "МНН", "МННСтрокой", "ДатаРегистрацииПредЦены", "Дозировка_ЕИ_Потребительская_КодОКЕИ",
+        "ЖН", "СМНН", "КЛП", "Наркотический", "ОКПД2", "Дозировка_ЕИ_КодОКЕИ",
         "РегНомерПредЦены", "ДатаОкончанияПредЦены",
         "ВидЗаписиРеестраЖН", "НомерРешенияРеестраЖН",
         "ДатаРегистрацииЦеныРеестраЖН", "ДатаВступленияВСилуРеестраЖН",
@@ -18,7 +18,6 @@ def convert_excel_to_labelstudio(input_file, output_file, max_records=None):
     wb = load_workbook(filename=input_file, read_only=True)
     ws = wb.active
 
-    # Очистка пробелов у заголовков
     headers = [str(cell.value).strip() for cell in next(ws.iter_rows(min_row=1, max_row=1))]
 
     total_rows = ws.max_row - 1
@@ -31,26 +30,23 @@ def convert_excel_to_labelstudio(input_file, output_file, max_records=None):
         if max_records and i >= max_records:
             break
 
-        # Удаление пробелов из заголовков и обработка значений
         row_data = {
             header: str(cell.value).strip() if cell.value is not None else ""
             for header, cell in zip(headers, row)
         }
 
-        task = {
-            "data": {
-                "text": row_data.get("ТоварПоставки", ""),
-                "meta": {
-                    "reference": row_data.get("ПредставлениеТовара", ""),
-                    **{
-                        k: v for k, v in row_data.items()
-                        if k not in EXCLUDED_COLUMNS and k not in ["ТоварПоставки", "ПредставлениеТовара", "№"]
-                    }
-                }
-            }
+        # Собираем все нужные поля в один словарь data
+        data = {
+            "text": row_data.get("ТоварПоставки", ""),
+            "reference": row_data.get("ПредставлениеТовара", "")
         }
 
-        result.append(task)
+        # Добавляем все оставшиеся поля (не исключенные и не text/reference)
+        for k, v in row_data.items():
+            if k not in EXCLUDED_COLUMNS and k not in ["ТоварПоставки", "ПредставлениеТовара", "№"]:
+                data[k] = v
+
+        result.append({"data": data})
 
     with open(output_file, "w", encoding="utf-8") as f_out:
         json.dump(result, f_out, ensure_ascii=False, indent=2)
