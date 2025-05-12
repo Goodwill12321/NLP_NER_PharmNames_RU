@@ -21,63 +21,44 @@ def load_texts_from_excel(path, limit=None):
             data.append(str(val).strip())
     return data
 
+def remove_overlapping_ents(ents):
+    ents = sorted(ents, key=lambda x: (x.start_char, -(x.end_char - x.start_char)))
+    filtered = []
+    prev_end = -1
+    for ent in ents:
+        if ent.start_char >= prev_end:
+            filtered.append(ent)
+            prev_end = ent.end_char
+    return filtered
+
+from ruler_patterns import get_ruler_patterns
 
 def build_spacy_ruler(nlp):
     ruler = nlp.add_pipe("entity_ruler", before="ner", config={"overwrite_ents": True})
-
-    patterns = [
-        # Потребительская упаковка (№30, х30, x10, ×10)
-        {
-            "label": "ПотребительскаяУпаковкаКолво",
-            "pattern": [{"TEXT": {"REGEX": r"^(№|x|х|×)$"}}, {"TEXT": {"REGEX": r"^\d+$"}}]
-        },
-        {
-            "label": "ПотребительскаяУпаковкаКолво",
-            "pattern": [{"TEXT": {"REGEX": r"^(№\d+|x\d+|х\d+|×\d+)$"}}]
-        },
-
-        # Дозировка (напр. 400 мкг, 0.5 мг)
-        {
-            "label": "Дозировка",
-            "pattern": [{"TEXT": {"REGEX": r"^\d+([.,]\d+)?$"}}, {"TEXT": {"REGEX": r"^(мг|мкг|г|мл|ед|МЕ|%)$"}}]
-        },
-
-        # ЛекФорма (табл п/о плен)
-        {
-            "label": "ЛекФорма",
-            "pattern": [
-                {"TEXT": {"REGEX": r"^(табл|капс|р-р|сусп|мазь|крем|гель|амп|саше|шпр|спрей|порошок)$"}},
-                {"TEXT": {"REGEX": r"^(п/о|в/в|в/м|плен|д/инъекций|жев|длительного|высвобожд)$"}, "OP": "*"}
-            ]
-        },
-
-        # Торговое наименование (включая начальные цифры и до 5 слов)
-        {
-            "label": "ТорговоеНаименование",
-            "pattern": [
-                {"TEXT": {"REGEX": r"^\d+(-|–)?$"}, "OP": "?"},
-                {"IS_ALPHA": True, "OP": "+"},
-                {"IS_ALPHA": True, "OP": "*"}
-            ]
-        },
-    ]
-
-    ruler.add_patterns(patterns)
-
-
-
-
-
+    ruler.add_patterns(get_ruler_patterns())
+    return ruler
 
 def annotate_texts(texts, nlp):
     annotated = []
     for text in tqdm(texts, desc="Разметка spaCy"):
         doc = nlp(text)
+        doc.ents = remove_overlapping_ents(list(doc.ents))
+
+        # Удалим лишние ТорговоеНаименование, оставим только первое
+        tn_seen = False
+        final_ents = []
+        for ent in doc.ents:
+            if ent.label_ == "ТорговоеНаименование":
+                if not tn_seen:
+                    final_ents.append(ent)
+                    tn_seen = True
+            else:
+                final_ents.append(ent)
+
         spans = [{"start": ent.start_char, "end": ent.end_char, "label": ent.label_, "text": ent.text}
-                 for ent in doc.ents]
+                 for ent in final_ents]
         annotated.append({"text": text, "entities": spans})
     return annotated
-
 
 def export_to_label_studio_format(annotated, output_file):
     labelstudio_data = []
@@ -90,7 +71,6 @@ def export_to_label_studio_format(annotated, output_file):
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(labelstudio_data, f, ensure_ascii=False, indent=2)
 
-
 def import_from_labelstudio(filepath):
     with open(filepath, encoding="utf-8") as f:
         data = json.load(f)
@@ -102,7 +82,6 @@ def import_from_labelstudio(filepath):
                 for ann in item.get("annotations", []) for result in ann.get("result", [])]
         spacy_format.append((text, {"entities": ents}))
     return spacy_format
-
 
 def save_spacy_training_data(examples, output_path):
     nlp = spacy.blank("ru")
@@ -117,14 +96,12 @@ def save_spacy_training_data(examples, output_path):
 
     db.to_disk(output_path)
 
-
 def export_jsonl_for_llm(examples, output_path):
     with open(output_path, "w", encoding="utf-8") as f:
         for text, annot in examples:
             json.dump({"text": text, "entities": [{"start": s, "end": e, "label": l} for s, e, l in annot["entities"]]},
                       f, ensure_ascii=False)
             f.write("\n")
-
 
 def train_spacy_model(training_data_path, output_model_path):
     nlp = spacy.blank("ru")
@@ -145,7 +122,6 @@ def train_spacy_model(training_data_path, output_model_path):
 
     nlp.to_disk(output_model_path)
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Разметка и дообучение spaCy.")
     parser.add_argument("mode", choices=["annotate", "retrain", "export_llm"], help="Режим работы: annotate, retrain, export_llm")
@@ -155,7 +131,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.mode == "annotate":
-        # Первичная разметка
         print("🔄 Загрузка модели spaCy...")
         nlp = spacy.load("ru_core_news_lg")
         build_spacy_ruler(nlp)
@@ -171,7 +146,6 @@ if __name__ == "__main__":
         print("✅ Готово!")
 
     elif args.mode == "retrain":
-        # Дообучение модели
         print("📥 Импорт из Label Studio...")
         examples = import_from_labelstudio(args.input_file)
 
@@ -184,7 +158,6 @@ if __name__ == "__main__":
         print("✅ Дообучение завершено!")
 
     elif args.mode == "export_llm":
-        # Экспорт для LLM
         print("📥 Импорт из Label Studio для LLM...")
         examples = import_from_labelstudio(args.input_file)
 
