@@ -12,7 +12,7 @@ INPUT_FILE = 'data/nlp_dataset_distinct_wo_col.csv'
 ANNOTATION_FILE = 'data/or_annotated_deepseekr.jsonl'
 VALIDATION_ERRORS_FILE = 'data/or_validation_errors_deepseekv.jsonl'
 BATCH_SIZE = 15
-ECHO_OUTPUT = True  # Если True, выводит аннотации в stdout
+ECHO_OUTPUT = False  # Если True, выводит аннотации в stdout
 
 # Промпты
 SYSTEM_PROMPT = """Лекарственные препараты имеют стандартные наименования в реестре лекарственных средств, 
@@ -105,8 +105,8 @@ L-Тироксин 75 Берлин-Хеми (таб. 75 мкг №100 блист
 validation_system_prompt = (
     "Ты — проверяющий фаомацевт, провизор. Другой модели было дано задание: "
     + SYSTEM_PROMPT
-    + ". На входе тебе в основном запросе будут даны JSON-аннотации выданные этой моделью. "
-    + "Найди ошибки и прокомментируй их, если они есть, приведя гуиды записей в которых ошибки "
+    + ". На входе тебе в основном запросе будут даны аннотации выданные этой моделью. (включая обрамляющие заголовки) "
+    + "Найди ошибки аннотаций согласно правил (на ошибки структуры json не обращай внимания!) и прокомментируй их, если они есть, приведя гуиды записей в которых ошибки "
     + "(брать из атрибуте ГУИД_Записи). Не изменяй саму аннотацию."
 )
 
@@ -176,18 +176,18 @@ def annotate_batch(index : int, batch: List[Dict[str, str]], headers: List[str])
     csv_block = rows_to_csv_block(batch, headers)
     user_prompt = f"Разметь следующие строки, вот входной файлв формате csv:\n\n{csv_block}"
     response = call_openrouter(MODEL_ANNOTATE, SYSTEM_PROMPT, user_prompt, "Аннотация " + str(index))
-        
-    try:
+    return response    
+    """ try:
         return extract_json_from_text(response)
     except json.JSONDecodeError:
         print("Ошибка парсинга JSON при аннотации.")
-        return []
+        return [] """
 
-def validate_annotations(index : int, annotations: List[Dict]) -> List[Dict]:
-    user_prompt = json.dumps(annotations, ensure_ascii=False, indent=2)
+def validate_annotations(index : int, annotations: str) -> List[Dict]:
+    user_prompt = annotations#json.dumps(annotations, ensure_ascii=False, indent=2)
     response = call_openrouter(MODEL_VALIDATE, validation_system_prompt, user_prompt, "Валидация " + str(index))
-
-    try:
+    return response
+"""   try:
         parsed = extract_json_from_text(response)
         if isinstance(parsed, list):
             return parsed
@@ -195,12 +195,16 @@ def validate_annotations(index : int, annotations: List[Dict]) -> List[Dict]:
             return []
     except json.JSONDecodeError:
         print("Ошибка парсинга JSON при валидации.")
-        return []
+        return [] """
 
 def save_jsonl(path: str, records: List[Dict]):
     with open(path, 'a', encoding='utf-8') as f:
         for record in records:
             f.write(json.dumps(record, ensure_ascii=False) + '\n')
+
+def append_response(path: str, response: str):
+    with open(path, 'a', encoding='utf-8') as f:
+        f.write(response + '\n')
 
 def main():
     rows = read_csv_rows(INPUT_FILE)
@@ -211,19 +215,26 @@ def main():
         #print(f"Обработка пачки {i+1}/{len(batches)}...")
 
         # Аннотация
-        annotated = annotate_batch(i, batch, headers)
+        attempts = 0
+        annotated = None
+        while attempts < 3:
+            annotated = annotate_batch(i, batch, headers)
+            if annotated:
+                break
+            attempts += 1
         if not annotated:
             continue
 
         # Сохранение аннотаций
-        save_jsonl(ANNOTATION_FILE, annotated)
+        append_response(ANNOTATION_FILE, annotated)
 
         # Валидация
-        errors = validate_annotations(i, annotated)
-        if errors:
+       # errors = validate_annotations(i, annotated)
+        """ if errors:
             for err in errors:
                 err['batch_index'] = i
-            save_jsonl(VALIDATION_ERRORS_FILE, errors)
+            save_jsonl(VALIDATION_ERRORS_FILE, errors) """
+        #append_response(VALIDATION_ERRORS_FILE, errors)
 
         time.sleep(1.5)  # пауза между запросами, если нужно
 
