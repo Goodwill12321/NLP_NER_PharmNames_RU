@@ -1,49 +1,67 @@
 import json
 import pandas as pd
+import re
 from sklearn.model_selection import train_test_split
 from datasets import Dataset
 from transformers import T5Tokenizer, T5ForConditionalGeneration, Trainer, TrainingArguments, DataCollatorForSeq2Seq
 
-# Путь к файлу с данными
-input_file = "./data/train.jsonl"
+# Нормализация ключей: заменим все пробелы и приведём к нижнему регистру
+def normalize_key(key):
+    key = key.replace(" ", "_").replace("-", "_").lower()
+    key = re.sub(r"__+", "_", key)
+    return key.strip("_")
 
-# Загрузка JSON
-with open(input_file, "r", encoding="utf-8") as f:
-    data = json.load(f)
-
-# Список целевых полей
+# Целевые поля (нормализованные имена)
 target_fields = [
-    "ТорговоеНаименование_ТП",
-    "Дозировка_ТП",
-    "Лекформа_ТП",
-    "ПервичнаяУпаковкаНазвание_ТП",
-    "ПервичнаяУпаковкаКоличество_ТП",
-    "ПотребительскаяУпаковкаКолво_ТП",
-    "ВторичнаяУпаковкаНазвание_ТП",
-    "ВторичнаяУпаковкаКоличество_ТП"
+    "торговое_наименование_тп",
+    "дозировка_тп",
+    "лек_форма_тп",
+    "первичная_упаковка_название_тп",
+    "первичная_упаковка_количество_тп",
+    "потребительская_упаковка_количество_тп",
+    "вторичная_упаковка_название_тп",
+    "вторичная_упаковка_количество_тп"
 ]
 
-# Формируем датафрейм
+# Путь к файлу с исходными данными
+input_file = "./data/train.jsonl"
+
+# Загружаем JSON
+with open(input_file, "r", encoding="utf-8") as f:
+    raw_data = json.load(f)
+
 records = []
-for arr in data:
-    for item in arr:
-        hints = item.get("ИсходныеДанные", {})
+
+for array in raw_data:
+    for item in array:
+        # Нормализуем ключи (приводим к одному стилю)
+        item_norm = {normalize_key(k): v for k, v in item.items()}
+
+        # Основные поля
+        product = item_norm.get("товар_поставки", item_norm.get("товарпоставки", ""))
+        
+        # Подсказки из эталонного представления
+        hints = {}
+        for k in ["торговое_наименование", "дозировка", "лек_форма", "первичная_упаковка_название", "первичная_упаковка_количество", "потребительская_упаковка_количество", "вторичная_упаковка_название", "вторичная_упаковка_количество"]:
+            v = item_norm.get(k)
+            if v:
+                hints[k] = str(v)
+
+        # Вход
         input_parts = [
-            f"Задание: Извлеки части наименования из товара.",
-            f"Product: {item['ТоварПоставки']}",
-            f"Hints: "
+            "Задание: Извлеки части наименования из товара.",
+            f"Product: {product}",
+            "Hints:"
         ]
-        input_parts.extend([
-            f"{k}: {v}" for k, v in hints.items()
-        ])
+        input_parts += [f"{k}: {v}" for k, v in hints.items()]
         input_text = "\n".join(input_parts)
 
-        # Упорядоченный JSON-ответ
+        # Выход
         output_dict = {}
         for field in target_fields:
-            val = item.get(field)
-            output_dict[field] = val if val else "null"
-
+            value = item_norm.get(field)
+            output_dict[field] = str(value) if value is not None else "null"
+        
         output_text = json.dumps(output_dict, ensure_ascii=False)
 
         records.append({
@@ -51,32 +69,28 @@ for arr in data:
             "output": output_text
         })
 
+# В датафрейм и train/test
 df = pd.DataFrame(records)
-
-# Разделение train/test
 train_df, test_df = train_test_split(df, test_size=0.15, random_state=42)
 train_dataset = Dataset.from_pandas(train_df)
 test_dataset = Dataset.from_pandas(test_df)
 
-# Инициализация токенизатора и модели
+# T5 модель
 model_name = "cointegrated/rut5-small"
 tokenizer = T5Tokenizer.from_pretrained(model_name)
 model = T5ForConditionalGeneration.from_pretrained(model_name)
 
 # Токенизация
-max_input_len = 512
-max_output_len = 128
-
 def preprocess(example):
-    inputs = tokenizer(example["input"], max_length=max_input_len, padding="max_length", truncation=True)
-    targets = tokenizer(example["output"], max_length=max_output_len, padding="max_length", truncation=True)
-    inputs["labels"] = targets["input_ids"]
-    return inputs
+    model_inputs = tokenizer(example["input"], max_length=512, padding="max_length", truncation=True)
+    labels = tokenizer(example["output"], max_length=128, padding="max_length", truncation=True)
+    model_inputs["labels"] = labels["input_ids"]
+    return model_inputs
 
 train_dataset = train_dataset.map(preprocess, remove_columns=["input", "output"])
 test_dataset = test_dataset.map(preprocess, remove_columns=["input", "output"])
 
-# Аргументы обучения
+# Обучение
 training_args = TrainingArguments(
     output_dir="./t5-med-ner",
     per_device_train_batch_size=4,
@@ -85,28 +99,24 @@ training_args = TrainingArguments(
     evaluation_strategy="epoch",
     save_strategy="epoch",
     logging_dir="./logs",
-    logging_steps=20,
-    save_total_limit=2,
+    logging_steps=10,
     load_best_model_at_end=True,
-    fp16=False  # ставь True, если есть GPU с поддержкой
+    save_total_limit=2,
+    fp16=False
 )
 
-# Коллатор
-data_collator = DataCollatorForSeq2Seq(tokenizer, model=model)
-
-# Тренер
 trainer = Trainer(
     model=model,
     args=training_args,
+    tokenizer=tokenizer,
     train_dataset=train_dataset,
     eval_dataset=test_dataset,
-    tokenizer=tokenizer,
-    data_collator=data_collator
+    data_collator=DataCollatorForSeq2Seq(tokenizer, model=model)
 )
 
-# Обучение
+# Запуск обучения
 trainer.train()
 
-# Сохранение
+# Сохранение модели
 model.save_pretrained("./t5-med-ner")
 tokenizer.save_pretrained("./t5-med-ner")
