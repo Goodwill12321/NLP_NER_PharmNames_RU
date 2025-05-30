@@ -17,48 +17,66 @@ def extract_and_save_json_with_validation_and_errors(input_filepath, output_file
         with open(input_filepath, 'r', encoding='utf-8') as f:
             content = f.read()
 
-        # Регулярное выражение для поиска JSON-объектов.
-        # Используем нежадный поиск с re.DOTALL.
-        # Более сложное regex для проверки вложенности JSON может быть очень сложным
-        # и часто менее надежным, чем последующая валидация через json.loads().
-        # Поэтому, мы сначала ищем любые блоки {...}, а затем проверяем их содержимое.
-        json_pattern = re.compile(r'\{.*?\}', re.DOTALL)
+        # Define the regex to capture JSON objects.
+        # It looks for a '{' followed by any characters (non-greedy) and ends with a '}'.
+        # re.DOTALL ensures '.' matches newlines.
+        json_pattern = re.compile(r'(\{.*?\})', re.DOTALL) # Added parentheses around the whole pattern to capture it
 
         last_idx = 0
+        
+        # We need to find all matches and correctly manage the remainder.
+        # This requires iterating through the content and finding non-overlapping JSON blocks.
+        # A simpler way is to find all JSON-like blocks, process them, and then
+        # reconstruct the remainder by removing the successfully processed blocks.
+
+        # Let's find all potential JSON blocks first
+        potential_json_strings = []
         for match in json_pattern.finditer(content):
-            # Сохраняем текст до текущего совпадения
-            if match.start() > last_idx:
-                remainder_parts.append(content[last_idx:match.start()].strip())
+            potential_json_strings.append((match.group(1), match.start(), match.end())) # Capture the group
 
-            json_string = match.group(0)
+        processed_indices = [] # To keep track of parts of content that were valid JSON
+
+        for json_str, start_idx, end_idx in potential_json_strings:
+            # Clean the string - remove any leading/trailing whitespace or potentially a single quote
+            # This handles cases where the original data might have something like: '{...}'
+            cleaned_json_str = json_str.strip()
+            if cleaned_json_str.startswith("'") and cleaned_json_str.endswith("'"):
+                cleaned_json_str = cleaned_json_str[1:-1]
+            
             try:
-                json_object = json.loads(json_string)
+                json_object = json.loads(cleaned_json_str)
 
-                # Проверка на наличие "ИсходныеДанные" и его тип
+                # Check for "ИсходныеДанные" and its type
                 if "ИсходныеДанные" in json_object and isinstance(json_object["ИсходныеДанные"], dict):
                     extracted_json_objects.append(json_object)
+                    processed_indices.append((start_idx, end_idx)) # Mark this range as processed
                 else:
                     error_entries.append({
                         "error_text": "JSON-объект найден, но отсутствует или некорректен 'ИсходныеДанные' (ожидается dict).",
-                        "original_data": json_string
+                        "original_data": json_str # Use the original string for error reporting
                     })
             except json.JSONDecodeError as e:
                 error_entries.append({
                     "error_text": f"Строка похожа на JSON, но не валидна: {e}",
-                    "original_data": json_string
+                    "original_data": json_str # Use the original string for error reporting
                 })
             except Exception as e:
                 error_entries.append({
                     "error_text": f"Непредвиденная ошибка при обработке JSON: {e}",
-                    "original_data": json_string
+                    "original_data": json_str # Use the original string for error reporting
                 })
-            
-            last_idx = match.end()
         
-        # Сохраняем оставшийся текст после последнего совпадения
-        if last_idx < len(content):
-            remainder_parts.append(content[last_idx:].strip())
+        # Now reconstruct the remainder parts
+        current_idx = 0
+        processed_indices.sort() # Ensure indices are sorted to process remainder correctly
 
+        for start, end in processed_indices:
+            if start > current_idx:
+                remainder_parts.append(content[current_idx:start].strip())
+            current_idx = end
+        
+        if current_idx < len(content):
+            remainder_parts.append(content[current_idx:].strip())
 
         # --- Запись результатов ---
 
@@ -82,8 +100,8 @@ def extract_and_save_json_with_validation_and_errors(input_filepath, output_file
             print("Ошибочных элементов не найдено.")
 
         # 3. Запись остатка
-        cleaned_remainder = "\n".join(part for part in remainder_parts if part) # Удаляем пустые строки
-        if cleaned_remainder.strip(): # Проверяем, что остаток не пустой после strip
+        cleaned_remainder = "\n".join(part for part in remainder_parts if part) 
+        if cleaned_remainder.strip():
             with open(remainder_filepath, 'w', encoding='utf-8') as remfile:
                 remfile.write(cleaned_remainder)
             print(f"Оставшийся текст сохранен в {remainder_filepath}")
