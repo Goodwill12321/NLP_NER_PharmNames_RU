@@ -22,19 +22,38 @@ def load_texts_from_excel(path, limit=None):
     return data
 
 def remove_overlapping_ents(ents):
-    ents = sorted(ents, key=lambda x: (x.start_char, -(x.end_char - x.start_char)))
+    # приоритет: Дозировка и ЛекФорма выше, ПотребительскаяУпаковкаСредний, ТорговоеПоследнее
+    priority = {"Дозировка": 3, "ЛекФорма": 3, "ПотребительскаяУпаковкаКолво": 2, "ТорговоеНаименование": 1}
+    # сортируем по приоритету (убывание), затем по start, затем по длине
+    ents_sorted = sorted(
+        ents,
+        key=lambda x: (priority.get(x.label_, 0), x.start_char, -(x.end_char - x.start_char)),
+        reverse=True
+    )
     filtered = []
-    prev_end = -1
-    for ent in ents:
-        if ent.start_char >= prev_end:
+    occupied = []  # кортежи (start,end)
+    for ent in ents_sorted:
+        overlap = False
+        for s, e in occupied:
+            if not (ent.end_char <= s or ent.start_char >= e):
+                overlap = True
+                break
+        if not overlap:
             filtered.append(ent)
-            prev_end = ent.end_char
-    return filtered
+            occupied.append((ent.start_char, ent.end_char))
+    # вернуть в порядок появления
+    return sorted(filtered, key=lambda x: x.start_char)
 
 from ruler_patterns import get_ruler_patterns
 
 def build_spacy_ruler(nlp):
-    ruler = nlp.add_pipe("entity_ruler", before="ner", config={"overwrite_ents": True})
+    config = {"overwrite_ents": True, "validate": True}
+    if "ner" in nlp.pipe_names:
+        ruler = nlp.add_pipe("entity_ruler", before="ner", config=config)
+    else:
+        # если компонента 'ner' отсутствует, просто добавляем в начало
+        ruler = nlp.add_pipe("entity_ruler", first=True, config=config)
+        
     ruler.add_patterns(get_ruler_patterns())
     return ruler
 
