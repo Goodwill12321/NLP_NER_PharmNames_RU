@@ -16,10 +16,28 @@ model = T5ForConditionalGeneration.from_pretrained(MODEL_NAME)
 
 # Токенизация
 def preprocess(example):
-    inputs = tokenizer(example["input"], max_length=MAX_INPUT_LENGTH, padding="max_length", truncation=True)
-    labels = tokenizer(example["output"], max_length=MAX_TARGET_LENGTH, padding="max_length", truncation=True)
-    inputs["labels"] = labels["input_ids"]
-    return inputs
+    model_inputs = tokenizer(
+        example["input"],
+        max_length=MAX_INPUT_LENGTH,
+        padding="max_length",
+        truncation=True,
+    )
+    with tokenizer.as_target_tokenizer():
+        labels = tokenizer(
+            example["output"],
+            max_length=MAX_TARGET_LENGTH,
+            padding="max_length",
+            truncation=True,
+        )
+
+    labels_ids = labels["input_ids"]
+    # Заменяем паддинг токены на -100, чтобы не учитывать их в потере
+    labels_ids = [
+        (l if l != tokenizer.pad_token_id else -100)
+        for l in labels_ids
+    ]
+    model_inputs["labels"] = labels_ids
+    return model_inputs
 
 tokenized_dataset = dataset.map(preprocess, remove_columns=dataset.column_names)
 

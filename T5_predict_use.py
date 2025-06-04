@@ -3,72 +3,72 @@ from transformers import T5Tokenizer, T5ForConditionalGeneration
 from tqdm import tqdm
 import torch
 import re
+import os
+import random
 
 # === Параметры ===
-excel_path = "./data/nlp_dataset_distinct.xlsx"         # Входной файл
-output_path = "./data/predicted_tokenized_output_split.xlsx"
-model_path = "./flan_t5_medsplit/checkpoint-final"                     # Путь к модели
+excel_path = "./data/nlp_dataset_distinct.xlsx"
+output_path = "./data/predicted_tokenized_output_random_sample.xlsx"
+model_path = "./flan_t5_medsplit/checkpoint-final"
 sheet_name = 0
 
-start_row = 100      # С какой строки начать
-end_row = 110      # По какую строку (исключительно)
+start_row = 100       # Стартовая строка (включительно)
+end_row = 1000        # Конечная строка (исключительно)
+sample_size = 10      # Сколько случайных строк выбрать
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# === Загрузка модели ===
+# === Проверка и загрузка модели ===
+assert os.path.isdir(model_path), f"❌ Не найдена директория модели: {model_path}"
 tokenizer = T5Tokenizer.from_pretrained(model_path)
 model = T5ForConditionalGeneration.from_pretrained(model_path).to(device)
 model.eval()
 
-# === Подготовка текста для подачи в модель ===
+# === Подготовка входного текста ===
 def build_input(example: dict) -> str:
-    parts = [
-        f"ТоварПоставки: {example.get('ТоварПоставки', '')}",
-        f"ПредставлениеТовара: {example.get('ПредставлениеТовара', '')}",
-        f"ТорговоеНаименование: {example.get('ТорговоеНаименование', '')}",
-        f"Дозировка: {example.get('Дозировка', '')}",
-        f"ЛекФорма: {example.get('ЛекФорма', '')}",
-        f"ПервичнаяУпаковкаНазвание: {example.get('ПервичнаяУпаковкаНазвание', '')}",
-        f"ПервичнаяУпаковкаКоличество: {example.get('ПервичнаяУпаковкаКоличество', '')}",
-        f"ВторичнаяУпаковкаНазвание: {example.get('ВторичнаяУпаковкаНазвание', '')}",
-        f"ВторичнаяУпаковкаКоличество: {example.get('ВторичнаяУпаковкаКоличество', '')}",
-        f"ПотребительскаяУпаковкаКолво: {example.get('ПотребительскаяУпаковкаКолво', '')}",
-        
+    fields = [
+        "ТоварПоставки", "ПредставлениеТовара", "ТорговоеНаименование",
+        "Дозировка", "ЛекФорма", "ПервичнаяУпаковкаНазвание",
+        "ПервичнаяУпаковкаКоличество", "ВторичнаяУпаковкаНазвание",
+        "ВторичнаяУпаковкаКоличество", "ПотребительскаяУпаковкаКолво"
     ]
-    return " | ".join(parts)
+    return " | ".join([f"{field}: {example.get(field, '')}" for field in fields])
 
-# === Предсказание и разбор на поля ===
+# === Предсказание и разбор ===
 def predict_parts(example: dict) -> dict:
     input_text = build_input(example)
     inputs = tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512).to(device)
-    outputs = model.generate(**inputs, max_length=256)
+    with torch.no_grad():
+        outputs = model.generate(**inputs, max_length=256)
     decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-    # Разбор строки на ключи и добавление постфикса
+    print("🔎 decoded:", decoded)
     result = {}
-    for match in re.finditer(r"(\w+):\s?([^|]+)", decoded):
+    for match in re.finditer(r"([\w_]+):\s?([^|]+)", decoded):
         key, value = match.group(1).strip(), match.group(2).strip()
         result[f"{key}_ТП_pred"] = value
     return result
 
-# === Стриминг чтения Excel и обработка только нужных строк ===
-print(f"\n🔄 Чтение строк {start_row}–{end_row} из Excel...")
-df_chunk = pd.read_excel(
+# === Чтение диапазона строк и случайная выборка ===
+print(f"\n🔄 Чтение строк {start_row}–{end_row} из Excel: {excel_path}")
+df_range = pd.read_excel(
     excel_path,
     sheet_name=sheet_name,
-    skiprows=range(1, start_row + 1),  # Пропускаем заголовок + предыдущие строки
+    skiprows=range(1, start_row + 1),
     nrows=end_row - start_row
-)
-df_chunk = df_chunk.fillna("")
+).fillna("")
 
-# === Прогноз ===
-tqdm.pandas(desc="🤖 Предсказание")
-predictions = df_chunk.progress_apply(lambda row: predict_parts(row.to_dict()), axis=1)
+# === Случайная выборка N строк ===
+assert sample_size <= len(df_range), "❌ sample_size больше количества доступных строк в диапазоне!"
+df_sample = df_range.sample(n=sample_size, random_state=42).reset_index(drop=True)
 
-# === Объединение с оригинальными данными ===
+# === Предсказания ===
+tqdm.pandas(desc="🤖 Предсказание токенов")
+predictions = df_sample.progress_apply(lambda row: predict_parts(row.to_dict()), axis=1)
+
+# === Объединение с оригиналом ===
 predicted_df = pd.DataFrame(predictions.tolist())
-result_df = pd.concat([df_chunk.reset_index(drop=True), predicted_df], axis=1)
+result_df = pd.concat([df_sample, predicted_df], axis=1)
 
-# === Сохранение результата ===
+# === Сохранение ===
 result_df.to_excel(output_path, index=False)
-print(f"\n✅ Предсказания сохранены в: {output_path}")
+print(f"\n✅ {sample_size} случайных строк предсказаны и сохранены в: {output_path}")
