@@ -1,0 +1,9 @@
+*.csv*
+*.json
+*.xlsx*
+*.jsonl
+/__pycache__/
+*.pyc
+*.txt
+/model/   
+training/model/
