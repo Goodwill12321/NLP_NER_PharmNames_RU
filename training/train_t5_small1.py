@@ -39,53 +39,7 @@ target_fields = [
     "ВторичнаяУпаковкаКоличество_ТП"
 ]
 
-# === Загрузка данных ===
 
-input_file = "./data/train_nlp.json"
-with open(input_file, "r", encoding="utf-8") as f:
-    raw_data = json.load(f)
-
-records = []
-
-for array in raw_data:
-    for item in array:
-        # Поддержка вложенной структуры
-        base_data = normalize_keys_to_camel_case(item.get("ИсходныеДанные", {}))
-        flat_item = normalize_keys_to_camel_case(item)
-
-        # Основное поле (Product)
-        product = flat_item.get("ТоварПоставки", flat_item.get("Товарпоставки", ""))
-
-        # Подсказки — все поля из ИсходныеДанные
-        hints = {k: str(v) for k, v in base_data.items() if v not in [None, ""]}
-
-        input_parts = [
-            "Задание: Извлеки части наименования из товара.",
-            f"Product: {product}",
-            f"Hints: ПредставлениеТовара {flat_item.get('Представлениетовара', '')}",
-        ]
-        input_parts += [f"{k}: {v}" for k, v in hints.items()]
-        input_text = "\n".join(input_parts)
-
-        # Выход
-        output_dict = {}
-        for field in target_fields:
-            value = flat_item.get(to_camel_case(field))
-            output_dict[field] = str(value) if value is not None else "null"
-
-        output_text = json.dumps(output_dict, ensure_ascii=False)
-
-        records.append({
-            "input": input_text,
-            "output": output_text
-        })
-
-# === Разделение и токенизация ===
-
-df = pd.DataFrame(records)
-train_df, test_df = train_test_split(df, test_size=0.15, random_state=42)
-train_dataset = Dataset.from_pandas(train_df)
-test_dataset = Dataset.from_pandas(test_df)
 
 # T5 модель
 model_name = "cointegrated/rut5-small"
@@ -100,6 +54,54 @@ def preprocess(example):
     return model_inputs
 
 def main():
+    # === Загрузка данных ===
+
+    input_file = "./data/train_nlp.json"
+    with open(input_file, "r", encoding="utf-8") as f:
+        raw_data = json.load(f)
+
+    records = []
+
+    for array in raw_data:
+        for item in array:
+            # Поддержка вложенной структуры
+            base_data = normalize_keys_to_camel_case(item.get("ИсходныеДанные", {}))
+            flat_item = normalize_keys_to_camel_case(item)
+
+            # Основное поле (Product)
+            product = flat_item.get("ТоварПоставки", flat_item.get("Товарпоставки", ""))
+
+            # Подсказки — все поля из ИсходныеДанные
+            hints = {k: str(v) for k, v in base_data.items() if v not in [None, ""]}
+
+            input_parts = [
+                "Задание: Извлеки части наименования из товара.",
+                f"Product: {product}",
+                f"Hints: ПредставлениеТовара {flat_item.get('Представлениетовара', '')}",
+            ]
+            input_parts += [f"{k}: {v}" for k, v in hints.items()]
+            input_text = "\n".join(input_parts)
+
+            # Выход
+            output_dict = {}
+            for field in target_fields:
+                value = flat_item.get(to_camel_case(field))
+                output_dict[field] = str(value) if value is not None else "null"
+
+            output_text = json.dumps(output_dict, ensure_ascii=False)
+
+            records.append({
+                "input": input_text,
+                "output": output_text
+            })
+
+    # === Разделение и токенизация ===
+
+    df = pd.DataFrame(records)
+    train_df, test_df = train_test_split(df, test_size=0.15, random_state=42)
+    train_dataset = Dataset.from_pandas(train_df)
+    test_dataset = Dataset.from_pandas(test_df)
+
     train_dataset = train_dataset.map(preprocess, remove_columns=["input", "output"])
     test_dataset = test_dataset.map(preprocess, remove_columns=["input", "output"])
 
