@@ -1,12 +1,13 @@
 {
     "version": "0.2.0",
     "configurations": [
+        
         {
             "type": "debugpy",
             "request": "launch",
             "name": "Run Current File",
             "program": "${file}",
-            "args": [] // Пустой массив, чтобы параметры не запрашивались
+            "args": []
         },
         {
             "type": "debugpy",

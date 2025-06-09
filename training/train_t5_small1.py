@@ -7,39 +7,6 @@ from transformers import T5Tokenizer, T5ForConditionalGeneration, Trainer, Train
 
 # === Утилиты ===
 
-def to_camel_case(s: str) -> str:
-    # Если строка заканчивается на "_ТП", отделим суффикс
-    suffix = ''
-    if s.lower().endswith('_тп'):
-        s, suffix = s[:-3], '_ТП'
-    
-    # Если в оставшейся строке нет подчёркиваний — считаем, что это уже CamelCase
-    if '_' not in s:
-        return s.capitalize() + suffix
-
-    # Преобразуем основную часть в CamelCase
-    parts = s.split('_')
-    camel = parts[0].capitalize() + ''.join(word.capitalize() for word in parts[1:])
-    
-    return camel + suffix
-
-
-def normalize_keys_to_camel_case(d: dict) -> dict:
-    return {to_camel_case(k): v for k, v in d.items()}
-
-# Целевые поля (имена уже в CamelCase-стиле)
-target_fields = [
-    "ТорговоеНаименование_ТП",
-    "Дозировка_ТП",
-    "ЛекФорма_ТП",
-    "ПервичнаяУпаковкаНазвание_ТП",
-    "ПервичнаяУпаковкаКоличество_ТП",
-    "ПотребительскаяУпаковкаКоличество_ТП",
-    "ВторичнаяУпаковкаНазвание_ТП",
-    "ВторичнаяУпаковкаКоличество_ТП"
-]
-
-
 
 # T5 модель
 model_name = "cointegrated/rut5-small"
@@ -48,54 +15,59 @@ model = T5ForConditionalGeneration.from_pretrained(model_name)
 
 # Токенизация
 def preprocess(example):
-    model_inputs = tokenizer(example["input"], max_length=512, padding="max_length", truncation=True)
-    labels = tokenizer(example["output"], max_length=128, padding="max_length", truncation=True)
+    model_inputs = tokenizer(example["input"], max_length=128, padding="max_length", truncation=True)
+    labels = tokenizer(example["output"], max_length=256, padding="max_length", truncation=True)
     model_inputs["labels"] = labels["input_ids"]
     return model_inputs
 
 def main():
     # === Загрузка данных ===
 
-    input_file = "./data/train_nlp.json"
+    input_file = "./data/train_data_clear.json"
     with open(input_file, "r", encoding="utf-8") as f:
         raw_data = json.load(f)
 
     records = []
 
-    for array in raw_data:
-        for item in array:
-            # Поддержка вложенной структуры
-            base_data = normalize_keys_to_camel_case(item.get("ИсходныеДанные", {}))
-            flat_item = normalize_keys_to_camel_case(item)
+     # for array in raw_data:
+    for item in raw_data:
+        # Поддержка вложенной структуры
+        # base_data = normalize_keys_to_camel_case(item.get("ИсходныеДанные", {}))
+        #flat_item = normalize_keys_to_camel_case(item)
 
-            # Основное поле (Product)
-            product = flat_item.get("ТоварПоставки", flat_item.get("Товарпоставки", ""))
+        # Основное поле (Product)
+        product = item.get("ТоварПоставки", "")
 
-            # Подсказки — все поля из ИсходныеДанные
-            hints = {k: str(v) for k, v in base_data.items() if v not in [None, ""]}
+        # Подсказки — все поля из ИсходныеДанные
+        #hints = {k: str(v) for k, v in base_data.items() if v not in [None, ""]}
 
-            input_parts = [
-                "Задание: Извлеки части наименования из товара.",
-                f"Product: {product}",
-                f"Hints: ПредставлениеТовара {flat_item.get('Представлениетовара', '')}",
-            ]
-            input_parts += [f"{k}: {v}" for k, v in hints.items()]
-            input_text = "\n".join(input_parts)
+        input_parts = [
+            "Задание: Извлеки части из названия лекарственного препарата.",
+            f"Наименование препарата: {product}",
+        ]
 
-            # Выход
-            output_dict = {}
-            for field in target_fields:
-                value = flat_item.get(to_camel_case(field))
-                output_dict[field] = str(value) if value is not None else "null"
+        #input_parts += [f"{k}: {v}" for k, v in hints.items()]
+        input_text = "\n".join(input_parts)
 
-            output_text = json.dumps(output_dict, ensure_ascii=False)
+        # Выход
+        #output_dict = {}
+        #for field in target_fields:
+        #   value = flat_item.get(to_camel_case(field))
+        #    output_dict[field] = str(value) if value is not None else "null"
+        output_dict = {k: str(v) for k, v in item.items() if v not in [None, ""] and k not in ["ТоварПоставки","ПредставлениеТовара", "ГУИД_Записи"]}
+        output_text = json.dumps(output_dict, ensure_ascii=False)
 
-            records.append({
-                "input": input_text,
-                "output": output_text
-            })
+        records.append({
+            "input": input_text,
+            "output": output_text
+        })
 
     # === Разделение и токенизация ===
+
+    max_input_len = max([len(tokenizer(r["input"])["input_ids"]) for r in records])
+    max_output_len = max([len(tokenizer(r["output"])["input_ids"]) for r in records])
+    print("Максимальная длина input:", max_input_len)
+    print("Максимальная длина output:", max_output_len)
 
     df = pd.DataFrame(records)
     train_df, test_df = train_test_split(df, test_size=0.15, random_state=42)
@@ -104,7 +76,7 @@ def main():
 
     train_dataset = train_dataset.map(preprocess, remove_columns=["input", "output"])
     test_dataset = test_dataset.map(preprocess, remove_columns=["input", "output"])
-
+    print(test_dataset[0])
     # === Обучение ===
 
     training_args = TrainingArguments(

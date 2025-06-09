@@ -290,7 +290,7 @@ def main():
     rows = read_csv_rows(INPUT_FILE)
     headers = list(rows[0].keys())
     batches = batch_rows(rows, BATCH_SIZE)
-    start_batch = 229  # Начинаем с 65-й пачки
+    start_batch = 389  # Начинаем с 65-й пачки
     for i, batch in enumerate(tqdm(batches, desc="Обработка пачек", unit="пачка")):
         #print(f"Обработка пачки {i+1}/{len(batches)}...")
         if (i < start_batch):

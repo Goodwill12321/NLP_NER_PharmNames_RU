@@ -7,3 +7,9 @@
 *.txt
 /model/   
 training/model/
+ls-ml/my_hf_ner_model.py
+ls-ml/my_ner_backend/_wsgi.py
+ls-ml/my_ner_backend/docker-compose.yml
+ls-ml/my_ner_backend/Dockerfile
+ls-ml/my_ner_backend/my_hf_ner_model.py
+ls-ml/my_ner_backend/README.md

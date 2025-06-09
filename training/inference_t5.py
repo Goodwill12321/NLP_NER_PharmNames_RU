@@ -16,43 +16,34 @@ OUTPUT_FILE = "./data/predictions.jsonl"
 tokenizer = T5Tokenizer.from_pretrained(MODEL_PATH)
 model = T5ForConditionalGeneration.from_pretrained(MODEL_PATH)
 
-# === УТИЛИТЫ ===
-hints_fields = [ "ТорговоеНаименование",
-      "Дозировка",
-      "ЛекФорма",
-      "ПервичнаяУпаковкаНазвание",
-      "ПервичнаяУпаковкаКоличество",
-      "ПотребительскаяУпаковкаКолво",
-      "ВторичнаяУпаковкаНазвание",
-      "ВторичнаяУпаковкаКоличество"]
-
-def normalize_keys_to_lower(d: dict) -> dict:
-    return {k.lower(): v for k, v in d.items()}
 
 def build_input_text(entry):
-    product = entry.get("Товар_Поставки", entry.get("Товарпоставки", ""))
-    entry_lower = normalize_keys_to_lower(entry)
-    hints = []
-    for field in hints_fields:
-        value = entry_lower.get(field.lower(), "")
-        if value not in [None, ""]:
-            hints.append(f"{field}: {value}")
+    product = entry.get("Товар_Поставки", entry.get("ТоварПоставки", ""))
+    #entry_lower = normalize_keys_to_lower(entry)
 
     return "\n".join([
-        "Задание: Извлеки части наименования из товара.",
-        f"Product: {product}",
-        "Hints:",
-        *hints
+        "Задание: Извлеки части из названия лекарственного препарата.",
+        f"Наименование препарата: {product}",        
     ])
 
 def predict(entry):
     input_text = build_input_text(entry)
     inputs = tokenizer(input_text, return_tensors="pt", truncation=True)
+
+    print("=== INPUT TEXT ===")
+    print(input_text)
+    print("=== TOKENIZED ===")
+    print(tokenizer.convert_ids_to_tokens(inputs["input_ids"][0]))
+    print("=== INPUT IDS ===")
+    print(inputs["input_ids"])
+
+
     start_time = time.time()
-    outputs = model.generate(**inputs, max_length=128, num_beams=4, early_stopping=True)
+    outputs = model.generate(**inputs, max_length=256, num_beams=4, early_stopping=True)
     end_time = time.time()
     print(f"⏱️ Время генерации: {end_time - start_time:.2f} секунд")
     decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    print(outputs[0])
     print(f"🔍 decoded: {decoded}")
     return decoded.replace("\n", " ").strip()
     """ try:
@@ -75,6 +66,14 @@ def read_csv(filepath):
             yield row
 
 def main():
+
+    test_input = {
+        "ТоварПоставки": "Нурофен для детей суспензия 100мг/5мл 100мл флакон"
+    }
+    print("=== ТЕСТ ГЕНЕРАЦИИ ===")
+    print(predict(test_input))
+    exit()  # временно прерываем, чтобы не шёл дальше
+
     input_path = Path(INPUT_FILE)
     if input_path.suffix == ".jsonl":
         examples = list(read_jsonl(input_path))
@@ -86,12 +85,11 @@ def main():
     # === ПРЕДСКАЗАНИЕ ===
     with open(OUTPUT_FILE, "w", encoding="utf-8") as out_f:
         for i, raw_entry in enumerate(examples):
-            entry = normalize_keys_to_camel_case(raw_entry)
+            entry = raw_entry#normalize_keys_to_camel_case(raw_entry)
             prediction = predict(entry)
 
             result = {
-                "гуид_записи": entry.get("гуид_записи"),
-                "товар_поставки": entry.get("товар_поставки", entry.get("Товарпоставки")),
+                "ТоварПоставки": entry.get("товар_поставки", entry.get("ТоварПоставки")),
                 "prediction": prediction
             }
 
