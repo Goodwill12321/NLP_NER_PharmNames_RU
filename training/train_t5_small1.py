@@ -20,10 +20,18 @@ def preprocess(example):
     model_inputs["labels"] = labels["input_ids"]
     return model_inputs
 
+
+def print_current_directory():
+    import os
+    current_directory = os.getcwd()
+    print("Текущая директория:", current_directory)    
+
 def main():
     # === Загрузка данных ===
 
-    input_file = "./data/train_data_clear.json"
+    print_current_directory()
+
+    input_file = "./NLP_NER_PharmNames_RU/training/data/train_data_clear.json"
     with open(input_file, "r", encoding="utf-8") as f:
         raw_data = json.load(f)
 
@@ -74,23 +82,36 @@ def main():
     train_dataset = Dataset.from_pandas(train_df)
     test_dataset = Dataset.from_pandas(test_df)
 
+    print("Размер тренировочного набора:", len(train_dataset))
+    print("Размер тестового (валидационного) набора:", len(test_dataset))
+
     train_dataset = train_dataset.map(preprocess, remove_columns=["input", "output"])
     test_dataset = test_dataset.map(preprocess, remove_columns=["input", "output"])
     print(test_dataset[0])
     # === Обучение ===
+
+    """ import torch
+    fp16 = False
+
+    if torch.cuda.is_available():
+      fp16 = True
+      print(torch.cuda.get_device_name(0))
+    else:
+      print("CPU") """
+
 
     training_args = TrainingArguments(
         output_dir="./t5-med-ner",
         per_device_train_batch_size=4,
         per_device_eval_batch_size=4,
         num_train_epochs=5,
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_strategy="epoch",
         logging_dir="./logs",
         logging_steps=10,
         load_best_model_at_end=True,
         save_total_limit=2,
-        fp16=False
+        fp16=False,
     )
 
     trainer = Trainer(
@@ -108,6 +129,8 @@ def main():
     # === Сохранение модели ===
     model.save_pretrained("./t5-med-ner")
     tokenizer.save_pretrained("./t5-med-ner")
+    
+    print("Final training loss:", trainer.state.log_history[-1])
 
 if __name__ == '__main__':
     main()
