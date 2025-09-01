@@ -1,7 +1,11 @@
 import json
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from datasets import Dataset, load_metric
+from datasets import Dataset
+import evaluate
+
+
+
 from transformers import (
     AutoTokenizer,
     AutoModelForSeq2SeqLM,
@@ -37,7 +41,7 @@ def preprocess(example):
 
 
 # === Метрики ===
-rouge = load_metric("rouge")
+rouge = evaluate.load("rouge")
 
 def compute_metrics(eval_pred):
     predictions, labels = eval_pred
