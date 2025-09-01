@@ -31,7 +31,7 @@ def main():
 
     print_current_directory()
 
-    input_file = "./NLP_NER_PharmNames_RU/training/data/train_data_clear.json"
+    input_file = "./NLP_NER_PharmNames_RU/training/data/train_data_clear.data"
     with open(input_file, "r", encoding="utf-8") as f:
         raw_data = json.load(f)
 

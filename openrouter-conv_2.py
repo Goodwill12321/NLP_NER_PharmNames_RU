@@ -1,3 +1,6 @@
+#2-nd version (actual)
+#annotation  (labeling) of names using openrouter deepseek
+
 import csv
 import json
 import time
