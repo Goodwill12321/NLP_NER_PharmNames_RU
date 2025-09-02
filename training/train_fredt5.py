@@ -103,21 +103,37 @@ def main():
     print("Размер test:", len(test_dataset))
     print("Пример:", test_dataset[0])
 
+ 
+    MAX_INPUT = 512
+    MAX_OUTPUT = 256
+    BATCH_SIZE = 4
+    EVAL_STEPS = 500
+    SAVE_STEPS = 500
+    LOGGING_STEPS = 100
+    LEARNING_RATE = 5e-5
+    EPOCHS = 5
+
     training_args = TrainingArguments(
         output_dir="./fredt5-large-ner",
-        per_device_train_batch_size=2,
-        per_device_eval_batch_size=2,
-        gradient_accumulation_steps=4,  # эффективный batch = 8
-        num_train_epochs=5,
-        eval_strategy="steps",   
-        save_strategy="epoch",
+        evaluation_strategy="steps",
+        eval_steps=EVAL_STEPS,
+        save_strategy="steps",
+        save_steps=SAVE_STEPS,
+        save_total_limit=3,
+        learning_rate=LEARNING_RATE,
+        per_device_train_batch_size=BATCH_SIZE,
+        per_device_eval_batch_size=BATCH_SIZE,
+        num_train_epochs=EPOCHS,
+        weight_decay=0.01,
         logging_dir="./logs",
-        logging_steps=20,
+        logging_steps=LOGGING_STEPS,
+        predict_with_generate=True,
         load_best_model_at_end=True,
-        save_total_limit=2,
-        fp16=True,  # экономия памяти
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
+        report_to="none",
     )
-
+    
     trainer = Trainer(
         model=model,
         args=training_args,
