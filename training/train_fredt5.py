@@ -113,11 +113,11 @@ def main():
     LEARNING_RATE = 5e-5
     EPOCHS = 5
 
-    import transformers
-    print("Transformers version:", transformers.__version__)
+    #import transformers
+    #print("Transformers version:", transformers.__version__)
 
-    from transformers import TrainingArguments
-    print("TrainingArguments из:", TrainingArguments.__module__)
+    #from transformers import TrainingArguments
+    #print("TrainingArguments из:", TrainingArguments.__module__)
 
 
     training_args = TrainingArguments(
@@ -134,7 +134,6 @@ def main():
         weight_decay=0.01,
         logging_dir="./logs",
         logging_steps=LOGGING_STEPS,
-        predict_with_generate=True,
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
