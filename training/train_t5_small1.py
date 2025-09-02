@@ -12,6 +12,7 @@ from transformers import T5Tokenizer, T5ForConditionalGeneration, Trainer, Train
 model_name = "cointegrated/rut5-small"
 tokenizer = T5Tokenizer.from_pretrained(model_name)
 model = T5ForConditionalGeneration.from_pretrained(model_name)
+input_file = "./NLP_NER_PharmNames_RU/training/data/train_data_clear.data"
 
 # Токенизация
 def preprocess(example):
@@ -31,7 +32,7 @@ def main():
 
     print_current_directory()
 
-    input_file = "./NLP_NER_PharmNames_RU/training/data/train_data_clear.data"
+    
     with open(input_file, "r", encoding="utf-8") as f:
         raw_data = json.load(f)
 

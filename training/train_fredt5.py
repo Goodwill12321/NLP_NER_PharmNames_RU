@@ -2,73 +2,63 @@ import json
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from datasets import Dataset
-import evaluate
-
-
-
 from transformers import (
     AutoTokenizer,
     AutoModelForSeq2SeqLM,
     Trainer,
     TrainingArguments,
-    DataCollatorForSeq2Seq
+    DataCollatorForSeq2Seq,
 )
+import evaluate
 
-# === Настройки ===
-model_name = "ai-forever/FRED-T5-base"   # можно попробовать "ai-forever/FRED-T5-large"
-input_file = "./training/data/train_data_clear.data"
 
-# === Загрузка модели и токенайзера ===
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+# === Настройки модели ===
+MODEL_NAME = "ai-forever/FRED-T5-large"
+INPUT_FILE = "./NLP_NER_PharmNames_RU/training/data/train_data_clear.data"
+
 
 # === Токенизация ===
-def preprocess(example):
+def preprocess(example, tokenizer, max_input_len=256, max_output_len=512):
+    """Подготовка токенов для модели"""
     model_inputs = tokenizer(
-        example["input"],
-        max_length=256,
-        padding="max_length",
-        truncation=True
+        example["input"], max_length=max_input_len, padding="max_length", truncation=True
     )
     labels = tokenizer(
-        example["output"],
-        max_length=512,
-        padding="max_length",
-        truncation=True
+        example["output"], max_length=max_output_len, padding="max_length", truncation=True
     )
     model_inputs["labels"] = labels["input_ids"]
     return model_inputs
 
 
-# === Метрики ===
+# === Метрика ===
 rouge = evaluate.load("rouge")
 
-def compute_metrics(eval_pred):
+
+def compute_metrics(eval_pred, tokenizer):
+    """Подсчёт качества по ROUGE-L"""
     predictions, labels = eval_pred
     decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
     decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
-    # Убираем лишние пробелы
     decoded_preds = [pred.strip() for pred in decoded_preds]
     decoded_labels = [label.strip() for label in decoded_labels]
 
     result = rouge.compute(
-        predictions=decoded_preds,
-        references=decoded_labels,
-        use_stemmer=True
+        predictions=decoded_preds, references=decoded_labels, use_stemmer=True
     )
-    # Берем RougeL как основную метрику
     return {"rougeL": result["rougeL"].mid.fmeasure}
 
 
-def main():
-    # === Загрузка данных ===
-    with open(input_file, "r", encoding="utf-8") as f:
+# === Загрузка и подготовка данных ===
+def load_dataset(tokenizer):
+    """Загрузка исходных данных и преобразование в HuggingFace Dataset"""
+    with open(INPUT_FILE, "r", encoding="utf-8") as f:
         raw_data = json.load(f)
 
     records = []
     for item in raw_data:
         product = item.get("ТоварПоставки", "")
+
         input_parts = [
             "Задание: Извлеки части из названия лекарственного препарата.",
             f"Наименование препарата: {product}",
@@ -76,43 +66,56 @@ def main():
         input_text = "\n".join(input_parts)
 
         output_dict = {
-            k: str(v) for k, v in item.items()
-            if v not in [None, ""] and k not in ["ТоварПоставки", "ПредставлениеТовара", "ГУИД_Записи"]
+            k: str(v)
+            for k, v in item.items()
+            if v not in [None, ""]
+            and k not in ["ТоварПоставки", "ПредставлениеТовара", "ГУИД_Записи"]
         }
         output_text = json.dumps(output_dict, ensure_ascii=False)
 
-        records.append({
-            "input": input_text,
-            "output": output_text
-        })
+        records.append({"input": input_text, "output": output_text})
 
-    # === Разделение ===
+    # Разделение train/test
     df = pd.DataFrame(records)
     train_df, test_df = train_test_split(df, test_size=0.15, random_state=42)
+
     train_dataset = Dataset.from_pandas(train_df)
     test_dataset = Dataset.from_pandas(test_df)
 
+    train_dataset = train_dataset.map(
+        lambda x: preprocess(x, tokenizer), remove_columns=["input", "output"]
+    )
+    test_dataset = test_dataset.map(
+        lambda x: preprocess(x, tokenizer), remove_columns=["input", "output"]
+    )
+
+    return train_dataset, test_dataset
+
+
+# === Основной процесс ===
+def main():
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
+
+    train_dataset, test_dataset = load_dataset(tokenizer)
+
     print("Размер train:", len(train_dataset))
     print("Размер test:", len(test_dataset))
+    print("Пример:", test_dataset[0])
 
-    train_dataset = train_dataset.map(preprocess, remove_columns=["input", "output"])
-    test_dataset = test_dataset.map(preprocess, remove_columns=["input", "output"])
-
-    # === Параметры обучения ===
     training_args = TrainingArguments(
-        output_dir="./fred-t5-med-ner",
-        per_device_train_batch_size=2,        # безопасно для 12Гб VRAM
+        output_dir="./fredt5-large-ner",
+        per_device_train_batch_size=2,
         per_device_eval_batch_size=2,
-        gradient_accumulation_steps=8,        # эквивалент batch=16
-        num_train_epochs=8,
+        gradient_accumulation_steps=4,  # эффективный batch = 8
+        num_train_epochs=5,
         evaluation_strategy="epoch",
         save_strategy="epoch",
         logging_dir="./logs",
         logging_steps=20,
         load_best_model_at_end=True,
-        save_total_limit=3,
-        fp16=True,   # mixed precision
-        report_to="none"
+        save_total_limit=2,
+        fp16=True,  # экономия памяти
     )
 
     trainer = Trainer(
@@ -122,16 +125,16 @@ def main():
         train_dataset=train_dataset,
         eval_dataset=test_dataset,
         data_collator=DataCollatorForSeq2Seq(tokenizer, model=model),
-        compute_metrics=compute_metrics
+        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, tokenizer),
     )
 
-    # === Запуск ===
     trainer.train()
 
-    # === Сохранение модели ===
-    model.save_pretrained("./fred-t5-med-ner")
-    tokenizer.save_pretrained("./fred-t5-med-ner")
-    print("Final training loss:", trainer.state.log_history[-1])
+    # Сохранение
+    model.save_pretrained("./fredt5-large-ner")
+    tokenizer.save_pretrained("./fredt5-large-ner")
+    print("✅ Обучение завершено и модель сохранена!")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
