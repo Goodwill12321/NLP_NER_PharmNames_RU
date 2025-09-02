@@ -14,7 +14,7 @@ import evaluate
 
 # === Настройки модели ===
 MODEL_NAME = "ai-forever/FRED-T5-large"
-INPUT_FILE = "./NLP_NER_PharmNames_RU/training/data/train_data_clear.data"
+INPUT_FILE = "./training/data/train_data_clear.data"
 
 
 # === Токенизация ===
