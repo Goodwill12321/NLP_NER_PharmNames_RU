@@ -109,7 +109,7 @@ def main():
         per_device_eval_batch_size=2,
         gradient_accumulation_steps=4,  # эффективный batch = 8
         num_train_epochs=5,
-        evaluation_strategy="epoch",
+        eval_strategy="steps",   
         save_strategy="epoch",
         logging_dir="./logs",
         logging_steps=20,
