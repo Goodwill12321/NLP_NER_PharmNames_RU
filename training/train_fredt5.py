@@ -113,6 +113,13 @@ def main():
     LEARNING_RATE = 5e-5
     EPOCHS = 5
 
+    import transformers
+    print("Transformers version:", transformers.__version__)
+
+    from transformers import TrainingArguments
+    print("TrainingArguments из:", TrainingArguments.__module__)
+
+
     training_args = TrainingArguments(
         output_dir="./fredt5-large-ner",
         eval_strategy="steps",
