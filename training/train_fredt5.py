@@ -119,6 +119,8 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
 
+    model.gradient_checkpointing_enable()
+
     train_dataset, test_dataset = load_dataset(tokenizer)
 
     print("Размер train:", len(train_dataset))
@@ -128,10 +130,10 @@ def main():
 
  
     MAX_INPUT = 128
-    MAX_OUTPUT = 256
+    MAX_OUTPUT = 192
     BATCH_SIZE = 1
-    EVAL_STEPS = 500
-    SAVE_STEPS = 500
+    EVAL_STEPS = 1000
+    SAVE_STEPS = 1000
     LOGGING_STEPS = 100
     LEARNING_RATE = 5e-5
     EPOCHS = 5
@@ -162,7 +164,9 @@ def main():
         metric_for_best_model="eval_loss",
         greater_is_better=False,
         report_to="none",
-        fp16=True
+        fp16=True,
+        optim="adafactor"
+
     )
     
     trainer = Trainer(
