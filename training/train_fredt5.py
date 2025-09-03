@@ -100,9 +100,9 @@ def load_dataset(tokenizer):
     #print_token_stats(test_dataset, tokenizer)
         # >>> вот здесь считаем статистику <<<
     print("📊 Train:")
-    print_token_stats(train_df, tokenizer)
+    print_token_stats(train_dataset, tokenizer)
     print("📊 Test:")
-    print_token_stats(test_df, tokenizer)
+    print_token_stats(test_dataset, tokenizer)
 
     train_dataset = train_dataset.map(
         lambda x: preprocess(x, tokenizer), remove_columns=["input", "output"]
@@ -131,7 +131,7 @@ def main():
     print("Max input:", max(inputs), "Max output:", max(outputs), "95th percentile input:", np.percentile(inputs, 95), "95th percentile output:", np.percentile(outputs, 95))
 
  
-    MAX_INPUT = 512
+    MAX_INPUT = 128
     MAX_OUTPUT = 256
     BATCH_SIZE = 1
     EVAL_STEPS = 500
