@@ -48,6 +48,20 @@ def compute_metrics(eval_pred, tokenizer):
     )
     return {"rougeL": result["rougeL"].mid.fmeasure}
 
+import numpy as np
+
+def print_token_stats(dataset, tokenizer):
+    inputs = [len(tokenizer(x)["input_ids"]) for x in dataset["input"]]
+    outputs = [len(tokenizer(x)["input_ids"]) for x in dataset["output"]]
+
+    print("Макс длина входа:", max(inputs))
+    print("95 перцентиль входа:", np.percentile(inputs, 95))
+    print("Макс длина выхода:", max(outputs))
+    print("95 перцентиль выхода:", np.percentile(outputs, 95))
+    print("Пример входа:", dataset["input"][0])
+    print("Пример выхода:", dataset["output"][0])
+
+
 
 # === Загрузка и подготовка данных ===
 def load_dataset(tokenizer):
@@ -81,6 +95,14 @@ def load_dataset(tokenizer):
 
     train_dataset = Dataset.from_pandas(train_df)
     test_dataset = Dataset.from_pandas(test_df)
+
+    #print_token_stats(train_dataset, tokenizer)
+    #print_token_stats(test_dataset, tokenizer)
+        # >>> вот здесь считаем статистику <<<
+    print("📊 Train:")
+    print_token_stats(train_df, tokenizer)
+    print("📊 Test:")
+    print_token_stats(test_df, tokenizer)
 
     train_dataset = train_dataset.map(
         lambda x: preprocess(x, tokenizer), remove_columns=["input", "output"]
