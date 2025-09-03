@@ -96,13 +96,10 @@ def load_dataset(tokenizer):
     train_dataset = Dataset.from_pandas(train_df)
     test_dataset = Dataset.from_pandas(test_df)
 
+    #print("📊 Train:")
     #print_token_stats(train_dataset, tokenizer)
+    #print("📊 Test:")
     #print_token_stats(test_dataset, tokenizer)
-        # >>> вот здесь считаем статистику <<<
-    print("📊 Train:")
-    print_token_stats(train_dataset, tokenizer)
-    print("📊 Test:")
-    print_token_stats(test_dataset, tokenizer)
 
     train_dataset = train_dataset.map(
         lambda x: preprocess(x, tokenizer), remove_columns=["input", "output"]
@@ -125,8 +122,14 @@ def main():
 
     print("Размер train:", len(train_dataset))
     print("Размер test:", len(test_dataset))
-    #print("Пример:", test_dataset[0])
-
+    print("Пример train_dataset 1:", train_dataset[0])
+    print("Пример train_dataset 2:", train_dataset[1])
+    print("Пример train_dataset 3:", train_dataset[2])
+    print("Пример test_dataset 1:", test_dataset[0])
+    print("Пример test_dataset 2:", test_dataset[1])
+    print("Пример test_dataset 3:", test_dataset[2])
+    
+    exit()
 
  
     MAX_INPUT = 128
