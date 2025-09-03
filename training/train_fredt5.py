@@ -10,7 +10,7 @@ from transformers import (
     DataCollatorForSeq2Seq,
 )
 import evaluate
-
+import numpy as np
 
 # === Настройки модели ===
 MODEL_NAME = "ai-forever/FRED-T5-large"
@@ -101,12 +101,17 @@ def main():
 
     print("Размер train:", len(train_dataset))
     print("Размер test:", len(test_dataset))
-    print("Пример:", test_dataset[0])
+    #print("Пример:", test_dataset[0])
+
+
+    inputs = [len(tokenizer(x)["input_ids"]) for x in train_dataset["input"]]
+    outputs = [len(tokenizer(x)["input_ids"]) for x in test_dataset["output"]]
+    print("Max input:", max(inputs), "Max output:", max(outputs), "95th percentile input:", np.percentile(inputs, 95), "95th percentile output:", np.percentile(outputs, 95))
 
  
     MAX_INPUT = 512
     MAX_OUTPUT = 256
-    BATCH_SIZE = 4
+    BATCH_SIZE = 1
     EVAL_STEPS = 500
     SAVE_STEPS = 500
     LOGGING_STEPS = 100
@@ -130,6 +135,7 @@ def main():
         learning_rate=LEARNING_RATE,
         per_device_train_batch_size=BATCH_SIZE,
         per_device_eval_batch_size=BATCH_SIZE,
+        gradient_accumulation_steps=4,
         num_train_epochs=EPOCHS,
         weight_decay=0.01,
         logging_dir="./logs",
@@ -138,6 +144,7 @@ def main():
         metric_for_best_model="eval_loss",
         greater_is_better=False,
         report_to="none",
+        fp16=True
     )
     
     trainer = Trainer(
