@@ -126,10 +126,6 @@ def main():
     #print("Пример:", test_dataset[0])
 
 
-    inputs = [len(tokenizer(x)["input_ids"]) for x in train_dataset["input"]]
-    outputs = [len(tokenizer(x)["input_ids"]) for x in test_dataset["output"]]
-    print("Max input:", max(inputs), "Max output:", max(outputs), "95th percentile input:", np.percentile(inputs, 95), "95th percentile output:", np.percentile(outputs, 95))
-
  
     MAX_INPUT = 128
     MAX_OUTPUT = 256
