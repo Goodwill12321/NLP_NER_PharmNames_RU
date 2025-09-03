@@ -13,7 +13,7 @@ import evaluate
 import numpy as np
 
 # === Настройки модели ===
-MODEL_NAME = "ai-forever/FRED-T5-large"
+MODEL_NAME = "ai-forever/ruT5-base"
 INPUT_FILE = "./training/data/train_data_clear.data"
 
 
@@ -120,21 +120,21 @@ def main():
 
     train_dataset, test_dataset = load_dataset(tokenizer)
 
-    print("Размер train:", len(train_dataset))
-    print("Размер test:", len(test_dataset))
-    print("Пример train_dataset 1:", train_dataset[0])
-    print("Пример train_dataset 2:", train_dataset[1])
-    print("Пример train_dataset 3:", train_dataset[2])
-    print("Пример test_dataset 1:", test_dataset[0])
-    print("Пример test_dataset 2:", test_dataset[1])
-    print("Пример test_dataset 3:", test_dataset[2])
+    #print("Размер train:", len(train_dataset))
+    #print("Размер test:", len(test_dataset))
+    #print("Пример train_dataset 1:", train_dataset[0])
+    #print("Пример train_dataset 2:", train_dataset[1])
+    #print("Пример train_dataset 3:", train_dataset[2])
+    #print("Пример test_dataset 1:", test_dataset[0])
+    #print("Пример test_dataset 2:", test_dataset[1])
+    #print("Пример test_dataset 3:", test_dataset[2])
     
-    exit()
+    #exit()
 
  
     MAX_INPUT = 128
     MAX_OUTPUT = 192
-    BATCH_SIZE = 1
+    BATCH_SIZE = 4
     EVAL_STEPS = 1000
     SAVE_STEPS = 1000
     LOGGING_STEPS = 100
@@ -158,7 +158,7 @@ def main():
         learning_rate=LEARNING_RATE,
         per_device_train_batch_size=BATCH_SIZE,
         per_device_eval_batch_size=BATCH_SIZE,
-        gradient_accumulation_steps=4,
+        gradient_accumulation_steps=2,
         num_train_epochs=EPOCHS,
         weight_decay=0.01,
         logging_dir="./logs",
