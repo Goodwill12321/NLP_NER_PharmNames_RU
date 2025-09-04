@@ -122,7 +122,7 @@ def main():
     
     clear_cuda_cache()
     
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, legacy=False)
     model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
 
     model.gradient_checkpointing_enable()
@@ -175,8 +175,8 @@ def main():
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
-        use_cache=False,
         report_to="none",
+        predict_with_generate=True,
         fp16=True,
         optim="adafactor"
 
