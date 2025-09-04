@@ -13,7 +13,7 @@ import evaluate
 import numpy as np
 
 # === Настройки модели ===
-MODEL_NAME = "ai-forever/FRED-T5-large"
+MODEL_NAME = "ai-forever/ruT5-base"
 INPUT_FILE = "./training/data/train_data_clear.data"
 
 
@@ -110,9 +110,18 @@ def load_dataset(tokenizer):
 
     return train_dataset, test_dataset
 
+import torch
+def clear_cuda_cache():
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
 
 # === Основной процесс ===
 def main():
+    
+    clear_cuda_cache()
+    
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
 
@@ -134,7 +143,7 @@ def main():
  
     MAX_INPUT = 128
     MAX_OUTPUT = 192
-    BATCH_SIZE = 1
+    BATCH_SIZE = 2
     EVAL_STEPS = 1000
     SAVE_STEPS = 1000
     LOGGING_STEPS = 100
@@ -149,7 +158,7 @@ def main():
 
 
     training_args = TrainingArguments(
-        output_dir="./fredt5-large-ner",
+        output_dir="./ruT5-base-ner",
         eval_strategy="steps",
         eval_steps=EVAL_STEPS,
         save_strategy="steps",
@@ -157,8 +166,8 @@ def main():
         save_total_limit=3,
         learning_rate=LEARNING_RATE,
         per_device_train_batch_size=BATCH_SIZE,
-        per_device_eval_batch_size=BATCH_SIZE,
-        gradient_accumulation_steps=4,
+        per_device_eval_batch_size=1,
+        gradient_accumulation_steps=2,
         num_train_epochs=EPOCHS,
         weight_decay=0.01,
         logging_dir="./logs",
@@ -185,10 +194,12 @@ def main():
     trainer.train()
 
     # Сохранение
-    model.save_pretrained("./fredt5-large-ner")
-    tokenizer.save_pretrained("./fredt5-large-ner")
+    model.save_pretrained("./ruT5-base-ner")
+    tokenizer.save_pretrained("./ruT5-base-ner")
     print("✅ Обучение завершено и модель сохранена!")
 
 
 if __name__ == "__main__":
     main()
+
+
