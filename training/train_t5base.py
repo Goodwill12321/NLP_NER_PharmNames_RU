@@ -91,7 +91,7 @@ def load_dataset(tokenizer):
 
     # Разделение train/test
     df = pd.DataFrame(records)
-    train_df, test_df = train_test_split(df, test_size=0.15, random_state=42)
+    train_df, test_df = train_test_split(df, test_size=0.12, random_state=42)
 
     train_dataset = Dataset.from_pandas(train_df)
     test_dataset = Dataset.from_pandas(test_df)
@@ -175,6 +175,7 @@ def main():
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
+        use_cache=False,
         report_to="none",
         fp16=True,
         optim="adafactor"
