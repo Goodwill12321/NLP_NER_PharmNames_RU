@@ -16,6 +16,33 @@ import numpy as np
 MODEL_NAME = "ai-forever/ruT5-base"
 INPUT_FILE = "./training/data/train_data_clear.data"
 
+import torch
+from transformers import Trainer
+
+class CustomTrainer(Trainer):
+    def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
+        """
+        Переопределяем метод, чтобы не сохранять промежуточные логиты.
+        Это предотвращает ошибки Out of Memory (OOM).
+        """
+        with torch.no_grad():
+            outputs = model(**inputs)
+            loss = outputs.loss.mean().detach()
+        
+        # Генерируем предсказания, используя `model.generate`
+        # `inputs['input_ids']` и `inputs['attention_mask']` - это входные данные
+        generated_tokens = model.generate(
+            inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            max_length=self.args.generation_max_length,
+            num_beams=self.args.generation_num_beams,
+            
+        )
+        
+        # Возвращаем предсказания и метки, но не логиты
+        return (loss, generated_tokens, inputs["labels"])
+
+
 
 # === Токенизация ===
 def preprocess(example, tokenizer, max_input_len=256, max_output_len=512):
@@ -182,13 +209,12 @@ def main():
 
     )
     
-    trainer = Trainer(
+    trainer = CustomTrainer(
         model=model,
         args=training_args,
         tokenizer=tokenizer,
         train_dataset=train_dataset,
         eval_dataset=test_dataset,
-        predict_with_generate=True,
         data_collator=DataCollatorForSeq2Seq(tokenizer, model=model),
         compute_metrics=lambda eval_pred: compute_metrics(eval_pred, tokenizer),
     )
