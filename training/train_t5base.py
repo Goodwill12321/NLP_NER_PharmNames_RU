@@ -176,7 +176,7 @@ def main():
         metric_for_best_model="eval_loss",
         greater_is_better=False,
         report_to="none",
-        predict_with_generate=True,
+        
         fp16=True,
         optim="adafactor"
 
@@ -188,6 +188,7 @@ def main():
         tokenizer=tokenizer,
         train_dataset=train_dataset,
         eval_dataset=test_dataset,
+        predict_with_generate=True,
         data_collator=DataCollatorForSeq2Seq(tokenizer, model=model),
         compute_metrics=lambda eval_pred: compute_metrics(eval_pred, tokenizer),
     )
